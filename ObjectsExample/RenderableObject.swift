@@ -17,7 +17,7 @@ class RenderableObject
 
     var count : Int
 
-    var scale : vector_float3 = float3(1.0)
+    var scale : vector_float3 = SIMD3<Float>(repeating: 1.0)
     var position : vector_float4
     var rotation : vector_float3
     var rotationRate : vector_float3
@@ -33,8 +33,8 @@ class RenderableObject
         self.objectData = ObjectData()
         self.objectData.LocalToWorld = matrix_identity_float4x4
         self.position = vector_float4(0.0, 0.0, 0.0, 1.0)
-        self.rotation = float3(0.0, 0.0, 0.0)
-        self.rotationRate = float3(0.0, 0.0, 0.0)
+        self.rotation = SIMD3<Float>(0.0, 0.0, 0.0)
+        self.rotationRate = SIMD3<Float>(0.0, 0.0, 0.0)
     }
 
     init(m : MTLBuffer, idx : MTLBuffer?, count : Int, tex : MTLTexture?)
@@ -45,13 +45,13 @@ class RenderableObject
         self.count = count
         self.objectData = ObjectData()
         self.objectData.LocalToWorld = matrix_identity_float4x4
-        self.objectData.color = float4(0.0, 0.0, 0.0, 0.0)
+        self.objectData.color = SIMD4<Float>(0.0, 0.0, 0.0, 0.0)
         self.objectData.pad1 = matrix_identity_float4x4
         self.objectData.pad2 = matrix_identity_float4x4
 
         self.position = vector_float4(0.0, 0.0, 0.0, 1.0)
-        self.rotation = float3(0.0, 0.0, 0.0)
-        self.rotationRate = float3(0.0, 0.0, 0.0)
+        self.rotation = SIMD3<Float>(0.0, 0.0, 0.0)
+        self.rotationRate = SIMD3<Float>(0.0, 0.0, 0.0)
     }
 
     func SetRotationRate(_ rot : vector_float3)

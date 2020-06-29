@@ -39,9 +39,9 @@ class Camera
 
     init()
     {
-        position = float3(0.0)
-        _direction = float3(0.0)
-        _up = float3(0.0)
+        position = SIMD3<Float>(repeating: 0.0)
+        _direction = SIMD3<Float>(repeating: 0.0)
+        _up = SIMD3<Float>(repeating: 0.0)
     }
 
     func GetViewMatrix() -> matrix_float4x4
@@ -49,13 +49,13 @@ class Camera
         if(_needsMatrixUpdate)
         {
             m = matrix_float4x4()
-            var right = crossProduct(up, b: direction)
+            let right = crossProduct(up, b: direction)
 
-            m.columns.0 = float4(right.x, right.y, right.z, 0.0)
-            m.columns.1 = float4(up.x, up.y, up.z, 0.0)
-            m.columns.2 = float4(direction.x, direction.y, direction.z, 0.0)
-            m.columns.3 = float4(position.x, position.y, position.z, 1.0)
-            m = matrix_invert(m)
+            m.columns.0 = SIMD4<Float>(right.x, right.y, right.z, 0.0)
+            m.columns.1 = SIMD4<Float>(up.x, up.y, up.z, 0.0)
+            m.columns.2 = SIMD4<Float>(direction.x, direction.y, direction.z, 0.0)
+            m.columns.3 = SIMD4<Float>(position.x, position.y, position.z, 1.0)
+            m = m.inverse
 
             _needsMatrixUpdate = false
         }

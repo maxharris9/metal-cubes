@@ -14,7 +14,7 @@ import Dispatch
 
 import Carbon.HIToolbox.Events
 
-let DEG2RAD = M_PI / 180.0
+let DEG2RAD = .pi / 180.0
 
 let SHADOW_DIMENSION = 2048
 
@@ -24,17 +24,17 @@ let SHADOW_PASS_COUNT : Int = 1
 let MAIN_PASS_COUNT : Int = 1
 let OBJECT_COUNT : Int = 200000
 
-let START_POSITION = float3(0.0, 0.0, -325.0)
+let START_POSITION = SIMD3<Float>(0.0, 0.0, -325.0)
 
-let START_CAMERA_VIEW_DIR = float3(0.0, 0.0, 1.0)
-let START_CAMERA_UP_DIR = float3(0.0, 1.0, 0.0)
+let START_CAMERA_VIEW_DIR = SIMD3<Float>(0.0, 0.0, 1.0)
+let START_CAMERA_UP_DIR = SIMD3<Float>(0.0, 1.0, 0.0)
 
-let GROUND_POSITION = float3(0.0, -250.0, 0.0)
-let GROUND_COLOR = float4(repeating: 1.0)
+let GROUND_POSITION = SIMD3<Float>(0.0, -250.0, 0.0)
+let GROUND_COLOR = SIMD4<Float>(repeating: 1.0)
 
-let SHADOWED_DIRECTIONAL_LIGHT_DIRECTION = float3(0.0, -1.0, 0.0)
-let SHADOWED_DIRECTIONAL_LIGHT_UP = float3(0.0, 0.0, 1.0)
-let SHADOWED_DIRECTIONAL_LIGHT_POSITION = float3(0.0, 225.0, 0.0)
+let SHADOWED_DIRECTIONAL_LIGHT_DIRECTION = SIMD3<Float>(0.0, -1.0, 0.0)
+let SHADOWED_DIRECTIONAL_LIGHT_UP = SIMD3<Float>(0.0, 0.0, 1.0)
+let SHADOWED_DIRECTIONAL_LIGHT_POSITION = SIMD3<Float>(0.0, 225.0, 0.0)
 
 let CONSTANT_BUFFER_SIZE : Int = OBJECT_COUNT * MemoryLayout<ObjectData>.size + SHADOW_PASS_COUNT * MemoryLayout<ShadowPass>.size + MAIN_PASS_COUNT * MemoryLayout<MainPass>.size
 
@@ -76,7 +76,7 @@ class MetalView : MTKView
     var frameCounter : UInt = 1
 
     // View and shadow cameras
-    var camera  = Camera()
+    var camera = Camera()
     var shadowCameras : Array<Camera> = [Camera]()
 
     // Controls
@@ -85,8 +85,8 @@ class MetalView : MTKView
     var moveLeft = false
     var moveRight = false
 
-    var orbit = float2()
-    var cameraAngles = float2()
+    var orbit = SIMD2<Float>()
+    var cameraAngles = SIMD2<Float>()
 
     var mouseDown = false
 
@@ -387,20 +387,20 @@ class MetalView : MTKView
                 let p2 = Float(getRandomValue(500.0))
 
                 let cube = RenderableObject(m: geo, idx: index, count: indexCount, tex: nil)
-                cube.position = float4(p, p1, p2, 1.0)
+                cube.position = SIMD4<Float>(p, p1, p2, 1.0)
                 cube.count = vertCount
 
                 let r = Float(Float(drand48())) * 2.0
                 let r1 = Float(Float(drand48())) * 2.0
                 let r2 = Float(Float(drand48())) * 2.0
 
-                cube.rotationRate = float3(r, r1, r2)
+                cube.rotationRate = SIMD3<Float>(r, r1, r2)
 
                 let scale = Float(drand48()*5.0)
 
-                cube.scale = float3(repeating: scale)
+                cube.scale = SIMD3<Float>(repeating: scale)
 
-                cube.objectData.color = float4(Float(drand48()),
+                cube.objectData.color = SIMD4<Float>(Float(drand48()),
                                                  Float(drand48()),
                                                  Float(drand48()), 1.0)
                 renderables.append(cube)
@@ -410,7 +410,7 @@ class MetalView : MTKView
         do {
             let (planeGeo, count) = createPlane(device!)
             groundPlane = StaticRenderableObject(m: planeGeo, idx: nil, count: count, tex: nil)
-            groundPlane!.position = float4(GROUND_POSITION.x,
+            groundPlane!.position = SIMD4<Float>(GROUND_POSITION.x,
                                            GROUND_POSITION.y,
                                            GROUND_POSITION.z,1.0)
             groundPlane!.objectData.color = GROUND_COLOR
@@ -636,7 +636,7 @@ class MetalView : MTKView
             mainPassView = matrix_multiply(camera.GetViewMatrix(), mainPassView)
             mainPassFrameData.ViewProjection = matrix_multiply(mainPassProjection, mainPassView)
             mainPassFrameData.ViewShadow0Projection = shadowPassData[0].ViewProjection
-            mainPassFrameData.LightPosition = float4(SHADOWED_DIRECTIONAL_LIGHT_POSITION.x,
+            mainPassFrameData.LightPosition = SIMD4<Float>(SHADOWED_DIRECTIONAL_LIGHT_POSITION.x,
                                                     SHADOWED_DIRECTIONAL_LIGHT_POSITION.y,
                                                     SHADOWED_DIRECTIONAL_LIGHT_POSITION.z, 1.0)
         }
@@ -747,7 +747,7 @@ class MetalView : MTKView
 
     func resetCamera() {
         camera.position = START_POSITION
-        cameraAngles = float2(0.0, 0.0)
+        cameraAngles = SIMD2<Float>(0.0, 0.0)
     }
 
     override var acceptsFirstResponder: Bool { return true }

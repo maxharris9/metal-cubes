@@ -35,7 +35,7 @@ struct PlaneVaryings
     float4 worldPosition;
 };
 
-vertex Varyings vertex_main(device Vertex* verts [[buffer(0)]],
+vertex Varyings vertex_main(const device Vertex* verts [[buffer(0)]],
                           constant ObjectData& data [[buffer(1)]],
                           constant MainPass&  frame_constants [[buffer(2)]],
                           uint vid [[vertex_id]])
@@ -49,7 +49,7 @@ vertex Varyings vertex_main(device Vertex* verts [[buffer(0)]],
     return out;
 }
 
-vertex LitVaryings lit_vertex(device Vertex* verts [[buffer(0)]],
+vertex LitVaryings lit_vertex(const device Vertex* verts [[buffer(0)]],
                             constant ObjectData& data [[buffer(1)]],
                             constant MainPass&  frame_constants [[buffer(2)]],
                             uint vid [[vertex_id]])
@@ -136,7 +136,7 @@ fragment float4 unshaded_shadowed_fragment(Varyings input [[stage_in]],
     return c;
 }
 
-vertex PlaneVaryings plane_vertex(device PlaneVertex* verts [[buffer(0)]],
+vertex PlaneVaryings plane_vertex(const device PlaneVertex* verts [[buffer(0)]],
                             constant ObjectData& data [[buffer(1)]],
                             constant MainPass&  frame_constants [[buffer(2)]],
                             uint vid [[vertex_id]])
@@ -206,7 +206,7 @@ struct ZPassVaryings
     float4 position [[position]];
 };
 
-vertex ZPassVaryings zpass_vertex_main(device Vertex* verts [[buffer(0)]],
+vertex ZPassVaryings zpass_vertex_main(const device Vertex* verts [[buffer(0)]],
                             constant ObjectData& data [[buffer(1)]],
                             constant ShadowPass&  frame_constants [[buffer(2)]],
                             uint vid [[vertex_id]])
