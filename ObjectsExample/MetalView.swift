@@ -283,12 +283,10 @@ class MetalView : MTKView
 
         let devices = MTLCopyAllDevices()
         for device in devices {
-            if !device.isLowPower {
+//            if !device.isLowPower {
                 self.device = device
-            }
+//            }
         }
-
-        Swift.print(device!.name)
 
         //MARK: Set up render targets in MTKView
 
