@@ -1,8 +1,9 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="11129.14" systemVersion="15F34" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="15705" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="11129.14"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="15705"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
         <customObject id="-2" userLabel="File's Owner" customClass="NSApplication">
@@ -666,14 +667,15 @@
                     </menu>
                 </menuItem>
             </items>
+            <point key="canvasLocation" x="139" y="154"/>
         </menu>
         <window title="ObjectsExample" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" releasedWhenClosed="NO" animationBehavior="default" id="QvC-M9-y7g">
             <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
             <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
-            <rect key="contentRect" x="-480" y="-203" width="1920" height="1080"/>
+            <rect key="contentRect" x="0.0" y="0.0" width="1920" height="1080"/>
             <rect key="screenRect" x="0.0" y="0.0" width="1440" height="877"/>
-            <value key="minSize" type="size" width="1920" height="1080"/>
-            <value key="maxSize" type="size" width="1920" height="1080"/>
+            <value key="minSize" type="size" width="800" height="600"/>
+            <value key="minFullScreenContentSize" type="size" width="800" height="600"/>
             <view key="contentView" id="EiT-Mj-1SZ" customClass="MetalView" customModule="ObjectsExample" customModuleProvider="target">
                 <rect key="frame" x="0.0" y="0.0" width="1920" height="1080"/>
                 <autoresizingMask key="autoresizingMask"/>
@@ -698,7 +700,7 @@
                     </textField>
                     <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="nhG-k6-gOY">
                         <rect key="frame" x="1766" y="1032" width="136" height="28"/>
-                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMinY="YES"/>
                         <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" borderStyle="bezel" alignment="center" title="Timing" drawsBackground="YES" id="FKj-nc-Ci5">
                             <font key="font" metaFont="system" size="19"/>
                             <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
@@ -712,6 +714,7 @@
                     <outlet property="mtLabel" destination="kc7-3B-Xjy" id="ncD-WH-cF6"/>
                 </connections>
             </view>
+            <point key="canvasLocation" x="139" y="-480"/>
         </window>
     </objects>
 </document>
