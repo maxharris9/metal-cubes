@@ -6,48 +6,39 @@
  Top level utility functions.
  */
 
-
 import Foundation
 import Metal
 
-class Camera
-{
-    var m : matrix_float4x4 = matrix_identity_float4x4
+class Camera {
+    var m: matrix_float4x4 = matrix_identity_float4x4
 
-    var position : vector_float3
-    {
+    var position: vector_float3 {
         didSet {
             _needsMatrixUpdate = true
         }
     }
 
-
-    fileprivate var _needsMatrixUpdate : Bool = true
-    fileprivate var _direction : vector_float3
-    var direction : vector_float3
-    {
+    private var _needsMatrixUpdate: Bool = true
+    private var _direction: vector_float3
+    var direction: vector_float3 {
         set { _direction = normalize(newValue); _needsMatrixUpdate = true }
         get { return _direction }
     }
 
-    fileprivate var _up : vector_float3
-    var up : vector_float3
-    {
+    private var _up: vector_float3
+    var up: vector_float3 {
         set { _up = normalize(newValue); _needsMatrixUpdate = true }
         get { return _up }
     }
 
-    init()
-    {
+    init() {
         position = SIMD3<Float>(repeating: 0.0)
         _direction = SIMD3<Float>(repeating: 0.0)
         _up = SIMD3<Float>(repeating: 0.0)
     }
 
-    func GetViewMatrix() -> matrix_float4x4
-    {
-        if(_needsMatrixUpdate)
-        {
+    func GetViewMatrix() -> matrix_float4x4 {
+        if _needsMatrixUpdate {
             m = matrix_float4x4()
             let right = crossProduct(up, b: direction)
 
@@ -62,13 +53,12 @@ class Camera
 
         return m
     }
-};
+}
 
-func getPerpectiveProjectionMatrix(_ FieldOfView : Float, aspectRatio : Float, zFar : Float, zNear : Float) -> matrix_float4x4
-{
-    var m : matrix_float4x4 = matrix_float4x4()
+func getPerpectiveProjectionMatrix(_ FieldOfView: Float, aspectRatio: Float, zFar: Float, zNear: Float) -> matrix_float4x4 {
+    var m: matrix_float4x4 = matrix_float4x4()
 
-    let f : Float = 1.0 / tan(FieldOfView / 2.0)
+    let f: Float = 1.0 / tan(FieldOfView / 2.0)
 
     m.columns.0.x = f / aspectRatio
     m.columns.1.y = f
@@ -76,154 +66,146 @@ func getPerpectiveProjectionMatrix(_ FieldOfView : Float, aspectRatio : Float, z
     m.columns.2.z = zFar / (zFar - zNear)
     m.columns.2.w = 1.0
 
-    m.columns.3.z = -(zNear*zFar)/(zFar-zNear)
+    m.columns.3.z = -(zNear * zFar) / (zFar - zNear)
 
     return m
 }
 
-func getLHOrthoMatrix(_ width : Float, height : Float, zFar : Float, zNear : Float) -> matrix_float4x4
-{
+func getLHOrthoMatrix(_ width: Float, height: Float, zFar: Float, zNear: Float) -> matrix_float4x4 {
     var m = matrix_float4x4()
 
     m.columns.0.x = 2.0 / width
 
     m.columns.1.y = 2.0 / height
 
-    m.columns.2.z = 1.0 / (zFar-zNear)
+    m.columns.2.z = 1.0 / (zFar - zNear)
 
-    m.columns.3.z = -zNear / (zFar-zNear)
+    m.columns.3.z = -zNear / (zFar - zNear)
     m.columns.3.w = 1.0
 
     return m
 }
 
-func createPlane(_ device : MTLDevice) -> (MTLBuffer, Int)
-{
-    var verts : [CFloat] = [ -1000.5, 0.0,  1000.5, 1.0,
-                              1000.5, 0.0,  1000.5, 1.0,
-                             -1000.5, 0.0, -1000.5, 1.0,
-                              1000.5, 0.0,  1000.5, 1.0,
-                              1000.5, 0.0, -1000.5, 1.0,
-                             -1000.5, 0.0, -1000.5, 1.0,]
+func createPlane(_ device: MTLDevice) -> (MTLBuffer, Int) {
+    var verts: [CFloat] = [-1000.5, 0.0, 1000.5, 1.0,
+                           1000.5, 0.0, 1000.5, 1.0,
+                           -1000.5, 0.0, -1000.5, 1.0,
+                           1000.5, 0.0, 1000.5, 1.0,
+                           1000.5, 0.0, -1000.5, 1.0,
+                           -1000.5, 0.0, -1000.5, 1.0]
 
-    let length = verts.count*MemoryLayout<CFloat>.size
+    let length = verts.count * MemoryLayout<CFloat>.size
 
     let geoBuffer = device.makeBuffer(length: length, options: MTLResourceOptions.storageModeManaged)!
 
     let geoPtr = geoBuffer.contents().bindMemory(to: CFloat.self, capacity: length)
 
     geoPtr.assign(from: &verts, count: verts.count)
-    geoBuffer.didModifyRange(0..<verts.count*MemoryLayout<Float>.size)
+    geoBuffer.didModifyRange(0 ..< verts.count * MemoryLayout<Float>.size)
 
     return (geoBuffer, verts.count / 4)
 }
 
-func createCube(_ device : MTLDevice) -> (MTLBuffer, MTLBuffer?, Int, Int)
-{
-    var verts : [CFloat] = [-0.5,  0.5, -0.5, 0.0, 0.0, -1.0,//0
-                             0.5,  0.5, -0.5, 0.0, 0.0, -1.0,//1
-                             0.5, -0.5, -0.5, 0.0, 0.0, -1.0,//2
-                             0.5, -0.5, -0.5, 0.0, 0.0, -1.0,//2
-                            -0.5, -0.5, -0.5, 0.0, 0.0, -1.0,//3
-                            -0.5,  0.5, -0.5, 0.0, 0.0, -1.0,//0
+func createCube(_ device: MTLDevice) -> (MTLBuffer, MTLBuffer?, Int, Int) {
+    var verts: [CFloat] = [-0.5, 0.5, -0.5, 0.0, 0.0, -1.0, // 0
+                           0.5, 0.5, -0.5, 0.0, 0.0, -1.0, // 1
+                           0.5, -0.5, -0.5, 0.0, 0.0, -1.0, // 2
+                           0.5, -0.5, -0.5, 0.0, 0.0, -1.0, // 2
+                           -0.5, -0.5, -0.5, 0.0, 0.0, -1.0, // 3
+                           -0.5, 0.5, -0.5, 0.0, 0.0, -1.0, // 0
+                           
+                           0.5, 0.5, -0.5, 1.0, 0.0, 0.0, // 1
+                           0.5, 0.5, 0.5, 1.0, 0.0, 0.0, // 5
+                           0.5, -0.5, 0.5, 1.0, 0.0, 0.0, // 6
+                           0.5, -0.5, 0.5, 1.0, 0.0, 0.0, // 6
+                           0.5, -0.5, -0.5, 1.0, 0.0, 0.0, // 2
+                           0.5, 0.5, -0.5, 1.0, 0.0, 0.0, // 1
+                           
+                           0.5, 0.5, 0.5, 0.0, 0.0, 1.0, // 5
+                           -0.5, 0.5, 0.5, 0.0, 0.0, 1.0, // 4
+                           -0.5, -0.5, 0.5, 0.0, 0.0, 1.0, // 7
+                           -0.5, -0.5, 0.5, 0.0, 0.0, 1.0, // 7
+                           0.5, -0.5, 0.5, 0.0, 0.0, 1.0, // 6
+                           0.5, 0.5, 0.5, 0.0, 0.0, 1.0, // 5
+                           
+                           -0.5, 0.5, 0.5, -1.0, 0.0, 0.0, // 4
+                           -0.5, 0.5, -0.5, -1.0, 0.0, 0.0, // 0
+                           -0.5, -0.5, -0.5, -1.0, 0.0, 0.0, // 3
+                           -0.5, -0.5, -0.5, -1.0, 0.0, 0.0, // 3
+                           -0.5, -0.5, 0.5, -1.0, 0.0, 0.0, // 7
+                           -0.5, 0.5, 0.5, -1.0, 0.0, 0.0, // 4
+                           
+                           -0.5, 0.5, 0.5, 0.0, 1.0, 0.0, // 4
+                           0.5, 0.5, 0.5, 0.0, 1.0, 0.0, // 5
+                           0.5, 0.5, -0.5, 0.0, 1.0, 0.0, // 1
+                           0.5, 0.5, -0.5, 0.0, 1.0, 0.0, // 1
+                           -0.5, 0.5, -0.5, 0.0, 1.0, 0.0, // 0
+                           -0.5, 0.5, 0.5, 0.0, 1.0, 0.0, // 4
+                           
+                           -0.5, -0.5, -0.5, 0.0, -1.0, 0.0, // 3
+                           0.5, -0.5, -0.5, 0.0, -1.0, 0.0, // 2
+                           0.5, -0.5, 0.5, 0.0, -1.0, 0.0, // 6
+                           0.5, -0.5, 0.5, 0.0, -1.0, 0.0, // 6
+                           -0.5, -0.5, 0.5, 0.0, -1.0, 0.0, // 7
+                           -0.5, -0.5, -0.5, 0.0, -1.0, 0.0, // 3
+                           ]
 
-        0.5,  0.5, -0.5, 1.0,0.0,0.0, //1
-        0.5,  0.5,  0.5, 1.0,0.0,0.0, //5
-        0.5, -0.5,  0.5, 1.0,0.0,0.0, //6
-        0.5, -0.5,  0.5, 1.0,0.0,0.0, //6
-        0.5, -0.5, -0.5, 1.0,0.0,0.0, //2
-        0.5,  0.5, -0.5, 1.0,0.0,0.0, //1
-
-         0.5,  0.5,  0.5, 0.0,0.0,1.0, //5
-        -0.5,  0.5,  0.5, 0.0,0.0,1.0, //4
-        -0.5, -0.5,  0.5, 0.0,0.0,1.0, //7
-        -0.5, -0.5,  0.5, 0.0,0.0,1.0, //7
-         0.5, -0.5,  0.5, 0.0,0.0,1.0, //6
-         0.5,  0.5,  0.5, 0.0,0.0,1.0, //5
-
-        -0.5,  0.5,  0.5, -1.0,0.0,0.0, //4
-        -0.5,  0.5, -0.5, -1.0,0.0,0.0, //0
-        -0.5, -0.5, -0.5, -1.0,0.0,0.0, //3
-        -0.5, -0.5, -0.5, -1.0,0.0,0.0, //3
-        -0.5, -0.5,  0.5, -1.0,0.0,0.0, //7
-        -0.5,  0.5,  0.5, -1.0,0.0,0.0, //4
-
-        -0.5,  0.5,  0.5, 0.0,1.0,0.0,//4
-         0.5,  0.5,  0.5, 0.0,1.0,0.0, //5
-         0.5,  0.5, -0.5, 0.0,1.0,0.0, //1
-         0.5,  0.5, -0.5, 0.0,1.0,0.0, //1
-        -0.5,  0.5, -0.5, 0.0,1.0,0.0, //0
-        -0.5,  0.5,  0.5, 0.0,1.0,0.0, //4
-
-        -0.5, -0.5, -0.5, 0.0,-1.0,0.0, //3
-         0.5, -0.5, -0.5, 0.0,-1.0,0.0, //2
-         0.5, -0.5,  0.5, 0.0,-1.0,0.0, //6
-         0.5, -0.5,  0.5, 0.0,-1.0,0.0, //6
-        -0.5, -0.5,  0.5, 0.0,-1.0,0.0, //7
-        -0.5, -0.5, -0.5, 0.0,-1.0,0.0, //3
-                                    ]
-
-    let length = verts.count*MemoryLayout<CFloat>.size
+    let length = verts.count * MemoryLayout<CFloat>.size
     let geoBuffer = device.makeBuffer(length: length, options: MTLResourceOptions.storageModeManaged)!
 
     let geoPtr = geoBuffer.contents().bindMemory(to: CFloat.self, capacity: length)
 
     geoPtr.assign(from: &verts, count: verts.count)
-    geoBuffer.didModifyRange(0..<verts.count*MemoryLayout<Float>.size)
+    geoBuffer.didModifyRange(0 ..< verts.count * MemoryLayout<Float>.size)
 
-    return (geoBuffer, nil, 0, verts.count/6)
+    return (geoBuffer, nil, 0, verts.count / 6)
 }
 
-func getRotationAroundZ(_ radians : Float) -> matrix_float4x4
-{
-    var m : matrix_float4x4 = matrix_identity_float4x4;
+func getRotationAroundZ(_ radians: Float) -> matrix_float4x4 {
+    var m: matrix_float4x4 = matrix_identity_float4x4
 
-    m.columns.0.x = cos(radians);
-    m.columns.0.y = sin(radians);
+    m.columns.0.x = cos(radians)
+    m.columns.0.y = sin(radians)
 
-    m.columns.1.x = -sin(radians);
-    m.columns.1.y = cos(radians);
+    m.columns.1.x = -sin(radians)
+    m.columns.1.y = cos(radians)
 
-    return m;
+    return m
 }
 
-func getRotationAroundY(_ radians : Float) -> matrix_float4x4
-{
-    var m : matrix_float4x4 = matrix_identity_float4x4;
+func getRotationAroundY(_ radians: Float) -> matrix_float4x4 {
+    var m: matrix_float4x4 = matrix_identity_float4x4
 
-    m.columns.0.x =  cos(radians);
-    m.columns.0.z = -sin(radians);
+    m.columns.0.x = cos(radians)
+    m.columns.0.z = -sin(radians)
 
-    m.columns.2.x = sin(radians);
-    m.columns.2.z = cos(radians);
+    m.columns.2.x = sin(radians)
+    m.columns.2.z = cos(radians)
 
-    return m;
+    return m
 }
 
-func getRotationAroundX(_ radians : Float) -> matrix_float4x4
-{
-    var m : matrix_float4x4 = matrix_identity_float4x4;
+func getRotationAroundX(_ radians: Float) -> matrix_float4x4 {
+    var m: matrix_float4x4 = matrix_identity_float4x4
 
-    m.columns.1.y = cos(radians);
-    m.columns.1.z = sin(radians);
+    m.columns.1.y = cos(radians)
+    m.columns.1.z = sin(radians)
 
-    m.columns.2.y = -sin(radians);
-    m.columns.2.z =  cos(radians);
+    m.columns.2.y = -sin(radians)
+    m.columns.2.z = cos(radians)
 
-    return m;
+    return m
 }
 
-func getTranslationMatrix(_ translation : vector_float4) -> matrix_float4x4
-{
-    var m : matrix_float4x4 = matrix_identity_float4x4
+func getTranslationMatrix(_ translation: vector_float4) -> matrix_float4x4 {
+    var m: matrix_float4x4 = matrix_identity_float4x4
 
     m.columns.3 = translation
 
     return m
 }
 
-func getScaleMatrix(_ x : Float, y : Float, z : Float) -> matrix_float4x4
-{
+func getScaleMatrix(_ x: Float, y: Float, z: Float) -> matrix_float4x4 {
     var m = matrix_identity_float4x4
 
     m.columns.0.x = x
@@ -233,22 +215,20 @@ func getScaleMatrix(_ x : Float, y : Float, z : Float) -> matrix_float4x4
     return m
 }
 
-//Returns a value from -max to max
-func getRandomValue(_ max : Double) -> Double
-{
-    let r : Int32 = Int32(Int64(arc4random()) - Int64(RAND_MAX))
+// Returns a value from -max to max
+func getRandomValue(_ max: Double) -> Double {
+    let r: Int32 = Int32(Int64(arc4random()) - Int64(RAND_MAX))
     let v = (Double(r) / Double(RAND_MAX)) * max
 
     return v
 }
 
-func crossProduct(_ a : vector_float3, b : vector_float3) -> vector_float3
-{
-    var r : vector_float3 = vector_float3()
+func crossProduct(_ a: vector_float3, b: vector_float3) -> vector_float3 {
+    var r: vector_float3 = vector_float3()
 
-    r.x = a.y*b.z - a.z*b.y
-    r.y = a.z*b.x - a.x*b.z
-    r.z = a.x*b.y - a.y*b.x
+    r.x = a.y * b.z - a.z * b.y
+    r.y = a.z * b.x - a.x * b.z
+    r.z = a.x * b.y - a.y * b.x
 
     return r
 }

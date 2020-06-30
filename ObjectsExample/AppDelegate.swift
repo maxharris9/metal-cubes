@@ -10,16 +10,9 @@ import Cocoa
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate {
+    @IBOutlet var window: NSWindow!
 
-    @IBOutlet weak var window: NSWindow!
+    func applicationDidFinishLaunching(_: Notification) {}
 
-
-    func applicationDidFinishLaunching(_ aNotification: Notification) {
-    }
-
-    func applicationWillTerminate(_ aNotification: Notification) {
-    }
-
-
+    func applicationWillTerminate(_: Notification) {}
 }
-

@@ -6,11 +6,10 @@
  The main view.
  */
 
-
 import Cocoa
+import Dispatch
 import Metal
 import MetalKit
-import Dispatch
 
 import Carbon.HIToolbox.Events
 
@@ -18,11 +17,11 @@ let DEG2RAD = .pi / 180.0
 
 let SHADOW_DIMENSION = 2048
 
-let MAX_FRAMES_IN_FLIGHT : Int = 3
+let MAX_FRAMES_IN_FLIGHT: Int = 3
 
-let SHADOW_PASS_COUNT : Int = 1
-let MAIN_PASS_COUNT : Int = 1
-let OBJECT_COUNT : Int = 200000
+let SHADOW_PASS_COUNT: Int = 1
+let MAIN_PASS_COUNT: Int = 1
+let OBJECT_COUNT: Int = 200_000
 
 let START_POSITION = SIMD3<Float>(0.0, 0.0, -325.0)
 
@@ -36,48 +35,47 @@ let SHADOWED_DIRECTIONAL_LIGHT_DIRECTION = SIMD3<Float>(0.0, -1.0, 0.0)
 let SHADOWED_DIRECTIONAL_LIGHT_UP = SIMD3<Float>(0.0, 0.0, 1.0)
 let SHADOWED_DIRECTIONAL_LIGHT_POSITION = SIMD3<Float>(0.0, 225.0, 0.0)
 
-let CONSTANT_BUFFER_SIZE : Int = OBJECT_COUNT * MemoryLayout<ObjectData>.size + SHADOW_PASS_COUNT * MemoryLayout<ShadowPass>.size + MAIN_PASS_COUNT * MemoryLayout<MainPass>.size
+let CONSTANT_BUFFER_SIZE: Int = OBJECT_COUNT * MemoryLayout<ObjectData>.size + SHADOW_PASS_COUNT * MemoryLayout<ShadowPass>.size + MAIN_PASS_COUNT * MemoryLayout<MainPass>.size
 
-class MetalView : MTKView
-{
-    @IBOutlet weak var lightingLabel : NSTextField?
-    @IBOutlet weak var cubeShadowLabel : NSTextField?
-    @IBOutlet weak var mtLabel : NSTextField?
-    @IBOutlet weak var multithreadUpdateLabel : NSTextField?
-    @IBOutlet weak var frameEncodingTimeField : NSTextField?
-    @IBOutlet weak var drawCountField : NSTextField?
+class MetalView: MTKView {
+    @IBOutlet var lightingLabel: NSTextField?
+    @IBOutlet var cubeShadowLabel: NSTextField?
+    @IBOutlet var mtLabel: NSTextField?
+    @IBOutlet var multithreadUpdateLabel: NSTextField?
+    @IBOutlet var frameEncodingTimeField: NSTextField?
+    @IBOutlet var drawCountField: NSTextField?
 
     let mainRPDesc = MTLRenderPassDescriptor()
 
-    var shadowRPs : Array<MTLRenderPassDescriptor> = [MTLRenderPassDescriptor]()
+    var shadowRPs: [MTLRenderPassDescriptor] = [MTLRenderPassDescriptor]()
 
-    var shadowMap : MTLTexture?
+    var shadowMap: MTLTexture?
 
-    var mainPassDepthTexture : MTLTexture?
-    var mainPassFramebuffer : MTLTexture?
+    var mainPassDepthTexture: MTLTexture?
+    var mainPassFramebuffer: MTLTexture?
 
-    var depthTestLess : MTLDepthStencilState?
-    var depthTestAlways : MTLDepthStencilState?
+    var depthTestLess: MTLDepthStencilState?
+    var depthTestAlways: MTLDepthStencilState?
 
     // The Metal queue that we will dispatch gpu work to
-    var metalQueue : MTLCommandQueue?
+    var metalQueue: MTLCommandQueue?
 
-    var semaphore : DispatchSemaphore
-    var dispatchQueue : DispatchQueue
+    var semaphore: DispatchSemaphore
+    var dispatchQueue: DispatchQueue
 
     // Contains all our objects and metadata about them
     // We aren't doing any culling so that means we'll be drawing everything every frame
-    var renderables : ContiguousArray<RenderableObject> = ContiguousArray<RenderableObject>()
-    var groundPlane : StaticRenderableObject?
+    var renderables: ContiguousArray<RenderableObject> = ContiguousArray<RenderableObject>()
+    var groundPlane: StaticRenderableObject?
 
     // Constant buffer ring
-    var constantBuffers : Array<MTLBuffer> = [MTLBuffer] ()
-    var constantBufferSlot : Int = 0
-    var frameCounter : UInt = 1
+    var constantBuffers: [MTLBuffer] = [MTLBuffer]()
+    var constantBufferSlot: Int = 0
+    var frameCounter: UInt = 1
 
     // View and shadow cameras
     var camera = Camera()
-    var shadowCameras : Array<Camera> = [Camera]()
+    var shadowCameras: [Camera] = [Camera]()
 
     // Controls
     var moveForward = false
@@ -152,8 +150,7 @@ class MetalView : MTKView
         camera.up = START_CAMERA_UP_DIR
 
         // Set up shadow camera and data
-        do
-        {
+        do {
             let c = Camera()
 
             c.direction = SHADOWED_DIRECTIONAL_LIGHT_DIRECTION
@@ -165,12 +162,12 @@ class MetalView : MTKView
             shadowPassData.append(ShadowPass())
         }
 
-        var timebase : mach_timebase_info_data_t = mach_timebase_info_data_t()
+        var timebase: mach_timebase_info_data_t = mach_timebase_info_data_t()
         mach_timebase_info(&timebase)
 
         machToMilliseconds = Double(timebase.numer) / Double(timebase.denom) * 1e-6
 
-        //add 3
+        // add 3
         gpuTiming.append(0)
         gpuTiming.append(0)
         gpuTiming.append(0)
@@ -225,15 +222,14 @@ class MetalView : MTKView
             let zpassVertex = lib.makeFunction(name: "zpass_vertex_main")
             let zpassFragment = lib.makeFunction(name: "zpass_fragment")
 
-            //Z only passes do not need to write color
+            // Z only passes do not need to write color
             pipeDesc.vertexFunction = zpassVertex
             pipeDesc.fragmentFunction = zpassFragment
             pipeDesc.colorAttachments[0].pixelFormat = .invalid
             pipeDesc.colorAttachments[0].writeMask = MTLColorWriteMask()
 
             try zpassPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
-        }
-        catch {
+        } catch {
             fatalError("Could not create lighting shaders, failing. \(error)")
         }
 
@@ -256,8 +252,7 @@ class MetalView : MTKView
 
             pipeDesc.fragmentFunction = quadTexVisFunction
             try texQuadVisPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
-        }
-        catch {
+        } catch {
             Swift.print("Could not compile visualization shaders, failing.")
             exit(1)
         }
@@ -269,28 +264,26 @@ class MetalView : MTKView
         drawCountField?.stringValue = "\(objectsToRender) draws"
         if multithreadedUpdate {
             multithreadUpdateLabel?.stringValue = "Multithreaded Update"
-        }
-        else {
+        } else {
             multithreadUpdateLabel?.stringValue = "Single Threaded Update"
         }
 
         if !multithreadedRender {
             mtLabel?.stringValue = "Single Threaded Encode"
-        }
-        else {
+        } else {
             mtLabel?.stringValue = "Multithreaded Encode"
         }
 
         let devices = MTLCopyAllDevices()
         for device in devices {
 //            if !device.isLowPower {
-                self.device = device
+            self.device = device
 //            }
         }
 
-        //MARK: Set up render targets in MTKView
+        // MARK: Set up render targets in MTKView
 
-        //this specifies the rendertarget the system will hand back
+        // this specifies the rendertarget the system will hand back
         colorPixelFormat = MTLPixelFormat.bgra8Unorm
 
         drawableSize.height = frame.height
@@ -299,16 +292,18 @@ class MetalView : MTKView
         metalQueue = device!.makeCommandQueue()
 
         // MARK: Constant Buffer Creation
+
         // Create our constant buffers
         // We've chosen 3 for this example; your application may need a different number
-        for _ in 1...MAX_FRAMES_IN_FLIGHT {
-            let buf : MTLBuffer = device!.makeBuffer(length: CONSTANT_BUFFER_SIZE, options: MTLResourceOptions.storageModeManaged)!
+        for _ in 1 ... MAX_FRAMES_IN_FLIGHT {
+            let buf: MTLBuffer = device!.makeBuffer(length: CONSTANT_BUFFER_SIZE, options: MTLResourceOptions.storageModeManaged)!
             constantBuffers.append(buf)
         }
 
         // MARK: Shadow Texture Creation
+
         do {
-            let texDesc : MTLTextureDescriptor = MTLTextureDescriptor()
+            let texDesc: MTLTextureDescriptor = MTLTextureDescriptor()
             texDesc.pixelFormat = MTLPixelFormat.depth32Float
             texDesc.width = SHADOW_DIMENSION
             texDesc.height = SHADOW_DIMENSION
@@ -321,10 +316,11 @@ class MetalView : MTKView
         }
 
         // MARK: Main framebuffer / depth creation
+
         do {
             let texDesc = MTLTextureDescriptor()
-            texDesc.width =  Int(frame.width)
-            texDesc.height =  Int(frame.height)
+            texDesc.width = Int(frame.width)
+            texDesc.height = Int(frame.height)
             texDesc.depth = 1
             texDesc.textureType = MTLTextureType.type2D
 
@@ -334,7 +330,7 @@ class MetalView : MTKView
 
             mainPassFramebuffer = device!.makeTexture(descriptor: texDesc)
 
-            self.mainRPDesc.colorAttachments[0].texture = mainPassFramebuffer
+            mainRPDesc.colorAttachments[0].texture = mainPassFramebuffer
         }
 
         do {
@@ -346,7 +342,7 @@ class MetalView : MTKView
             texDesc.storageMode = .private
             mainPassDepthTexture = device!.makeTexture(descriptor: texDesc)
 
-            self.mainRPDesc.depthAttachment.texture = mainPassDepthTexture
+            mainRPDesc.depthAttachment.texture = mainPassDepthTexture
         }
 
         do {
@@ -377,11 +373,12 @@ class MetalView : MTKView
         createPipelines()
 
         // MARK: Object Creation
+
         do {
             let (geo, index, indexCount, vertCount) = createCube(device!)
 
-            for _ in 0..<OBJECT_COUNT {
-                //NOTE returns a value within -value to value
+            for _ in 0 ..< OBJECT_COUNT {
+                // NOTE returns a value within -value to value
                 let p = Float(getRandomValue(500.0))
                 let p1 = Float(getRandomValue(100.0))
                 let p2 = Float(getRandomValue(500.0))
@@ -396,13 +393,13 @@ class MetalView : MTKView
 
                 cube.rotationRate = SIMD3<Float>(r, r1, r2)
 
-                let scale = Float(drand48()*5.0)
+                let scale = Float(drand48() * 5.0)
 
                 cube.scale = SIMD3<Float>(repeating: scale)
 
                 cube.objectData.color = SIMD4<Float>(Float(drand48()),
-                                                 Float(drand48()),
-                                                 Float(drand48()), 1.0)
+                                                     Float(drand48()),
+                                                     Float(drand48()), 1.0)
                 renderables.append(cube)
             }
         }
@@ -411,15 +408,15 @@ class MetalView : MTKView
             let (planeGeo, count) = createPlane(device!)
             groundPlane = StaticRenderableObject(m: planeGeo, idx: nil, count: count, tex: nil)
             groundPlane!.position = SIMD4<Float>(GROUND_POSITION.x,
-                                           GROUND_POSITION.y,
-                                           GROUND_POSITION.z,1.0)
+                                                 GROUND_POSITION.y,
+                                                 GROUND_POSITION.z, 1.0)
             groundPlane!.objectData.color = GROUND_COLOR
             groundPlane!.objectData.LocalToWorld.columns.3 = groundPlane!.position
         }
 
         // Main pass projection matrix
         // Our window cannot change size so we don't ever update this
-        mainPassProjection = getPerpectiveProjectionMatrix(Float(60.0*DEG2RAD), aspectRatio: Float(self.frame.width) / Float(self.frame.height), zFar: 2000.0, zNear: 1.0)
+        mainPassProjection = getPerpectiveProjectionMatrix(Float(60.0 * DEG2RAD), aspectRatio: Float(frame.width) / Float(frame.height), zFar: 2000.0, zNear: 1.0)
     }
 
     // Encodes a single shadow pass
@@ -427,7 +424,7 @@ class MetalView : MTKView
         let enc = commandBuffer.makeRenderCommandEncoder(descriptor: rp)!
         enc.setDepthStencilState(depthTestLess)
 
-        //We're only going to draw back faces into the shadowmap
+        // We're only going to draw back faces into the shadowmap
         enc.setCullMode(MTLCullMode.front)
 
         // setVertexOffset will allow faster updates, but we must bind the Constant buffer once
@@ -440,7 +437,7 @@ class MetalView : MTKView
         enc.setVertexBuffer(renderables[0].mesh, offset: 0, index: 0)
 
         var offset = objectDataOffset
-        for index in 0..<objectsToRender {
+        for index in 0 ..< objectsToRender {
             renderables[index].DrawZPass(enc, offset: offset)
             offset += MemoryLayout<ObjectData>.size
         }
@@ -470,22 +467,19 @@ class MetalView : MTKView
         if drawShadowsOnCubes {
             if drawLighting {
                 enc.setRenderPipelineState(litShadowedPipeline!)
-            }
-            else {
+            } else {
                 enc.setRenderPipelineState(unshadedShadowedPipeline!)
             }
-        }
-        else {
+        } else {
             if drawLighting {
                 enc.setRenderPipelineState(litPipeline!)
-            }
-            else {
+            } else {
                 enc.setRenderPipelineState(unshadedPipeline!)
             }
         }
 
         enc.setVertexBuffer(renderables[0].mesh!, offset: 0, index: 0)
-        for index in 0..<objectsToRender {
+        for index in 0 ..< objectsToRender {
             renderables[index].Draw(enc, offset: offset)
             offset += MemoryLayout<ObjectData>.size
         }
@@ -500,19 +494,18 @@ class MetalView : MTKView
 
         if showDepthAndShadow {
             mainRPDesc.depthAttachment.storeAction = .store
-        }
-        else {
+        } else {
             mainRPDesc.depthAttachment.storeAction = .dontCare
         }
 
-        let enc : MTLRenderCommandEncoder = mainCommandBuffer.makeRenderCommandEncoder(descriptor: mainRPDesc)!
+        let enc: MTLRenderCommandEncoder = mainCommandBuffer.makeRenderCommandEncoder(descriptor: mainRPDesc)!
         enc.setCullMode(MTLCullMode.back)
 
         if depthTest {
             enc.setDepthStencilState(depthTestLess)
         }
 
-        encodeMainPass(enc, constantBuffer: constantBuffer, passDataOffset : mainPassOffset, objectDataOffset: objectDataOffset)
+        encodeMainPass(enc, constantBuffer: constantBuffer, passDataOffset: mainPassOffset, objectDataOffset: objectDataOffset)
 
         enc.endEncoding()
 
@@ -524,8 +517,8 @@ class MetalView : MTKView
             let visEnc = mainCommandBuffer.makeRenderCommandEncoder(descriptor: rpDesc)!
 
             var viewport = MTLViewport(originX: 0.0, originY: 0.0,
-                                       width: Double(frame.width)*0.5,
-                                       height: Double(frame.height)*0.5,
+                                       width: Double(frame.width) * 0.5,
+                                       height: Double(frame.height) * 0.5,
                                        znear: 0.0, zfar: 1.0)
 
             visEnc.setViewport(viewport)
@@ -535,23 +528,23 @@ class MetalView : MTKView
 
             visEnc.drawPrimitives(type: MTLPrimitiveType.triangleStrip, vertexStart: 0, vertexCount: 4)
 
-            viewport = MTLViewport(originX: Double(frame.width)*0.5, originY: 0.0,
-                                   width: Double(frame.width)*0.5,
-                                   height: Double(frame.height)*0.5,
+            viewport = MTLViewport(originX: Double(frame.width) * 0.5, originY: 0.0,
+                                   width: Double(frame.width) * 0.5,
+                                   height: Double(frame.height) * 0.5,
                                    znear: 0.0, zfar: 1.0)
 
             visEnc.setViewport(viewport)
 
-            visEnc.setRenderPipelineState(self.depthVisPipeline!)
-            visEnc.setFragmentTexture(self.mainPassDepthTexture, index: 0)
+            visEnc.setRenderPipelineState(depthVisPipeline!)
+            visEnc.setFragmentTexture(mainPassDepthTexture, index: 0)
 
             visEnc.drawPrimitives(type: MTLPrimitiveType.triangleStrip, vertexStart: 0, vertexCount: 4)
 
             // Shadow
             viewport = MTLViewport(originX: 0.0,
-                                   originY: Double(frame.height)*0.5,
-                                   width: Double(frame.width)*0.5,
-                                   height: Double(frame.height)*0.5,
+                                   originY: Double(frame.height) * 0.5,
+                                   width: Double(frame.width) * 0.5,
+                                   height: Double(frame.height) * 0.5,
                                    znear: 0.0, zfar: 1.0)
 
             visEnc.setViewport(viewport)
@@ -560,8 +553,7 @@ class MetalView : MTKView
             visEnc.drawPrimitives(type: MTLPrimitiveType.triangleStrip, vertexStart: 0, vertexCount: 4)
 
             visEnc.endEncoding()
-        }
-        else {
+        } else {
             // Draws the main pass
             let finalEnc = mainCommandBuffer.makeRenderCommandEncoder(descriptor: rpDesc)!
 
@@ -575,18 +567,18 @@ class MetalView : MTKView
 
         mainCommandBuffer.present(currentDrawable)
 
-        mainCommandBuffer.addScheduledHandler { scheduledCommandBuffer in
+        mainCommandBuffer.addScheduledHandler { _ in
             self.gpuTiming[Int(currentFrame % 3)] = mach_absolute_time()
         }
 
-        mainCommandBuffer.addCompletedHandler { completedCommandBuffer in
+        mainCommandBuffer.addCompletedHandler { _ in
 
             let end = mach_absolute_time()
             self.gpuTiming[Int(currentFrame % 3)] = end - self.gpuTiming[Int(currentFrame % 3)]
 
             let seconds = self.machToMilliseconds * Double(self.gpuTiming[Int(currentFrame % 3)])
 
-            self.runningAverageGPU = (self.runningAverageGPU * Double(currentFrame-1) + seconds) / Double(currentFrame)
+            self.runningAverageGPU = (self.runningAverageGPU * Double(currentFrame - 1) + seconds) / Double(currentFrame)
 
             self.semaphore.signal()
         }
@@ -594,7 +586,7 @@ class MetalView : MTKView
         mainCommandBuffer.commit()
     }
 
-    override func draw(_ dirtyRect: NSRect) {
+    override func draw(_: NSRect) {
         // Synchronize frame rendering
         _ = semaphore.wait(timeout: DispatchTime.distantFuture)
 
@@ -604,8 +596,7 @@ class MetalView : MTKView
         // Update view matrix here
         if moveForward {
             camera.position.z += 1.0
-        }
-        else if moveBackward {
+        } else if moveBackward {
             camera.position.z -= 1.0
         }
 
@@ -624,21 +615,21 @@ class MetalView : MTKView
 
         do {
             // Figure out far plane distance at least
-            let zFar = distance(GROUND_POSITION,SHADOWED_DIRECTIONAL_LIGHT_POSITION)
+            let zFar = distance(GROUND_POSITION, SHADOWED_DIRECTIONAL_LIGHT_POSITION)
 
             shadowPassData[0].ViewProjection = getLHOrthoMatrix(1100, height: 1100, zFar: zFar, zNear: 25)
             shadowPassData[0].ViewProjection = matrix_multiply(shadowPassData[0].ViewProjection, shadowCameras[0].GetViewMatrix())
         }
 
         do {
-            //NOTE: We're doing an orbit so we've usurped the normal camera class here
+            // NOTE: We're doing an orbit so we've usurped the normal camera class here
             mainPassView = matrix_multiply(getRotationAroundY(cameraAngles.y), getRotationAroundX(cameraAngles.x))
             mainPassView = matrix_multiply(camera.GetViewMatrix(), mainPassView)
             mainPassFrameData.ViewProjection = matrix_multiply(mainPassProjection, mainPassView)
             mainPassFrameData.ViewShadow0Projection = shadowPassData[0].ViewProjection
             mainPassFrameData.LightPosition = SIMD4<Float>(SHADOWED_DIRECTIONAL_LIGHT_POSITION.x,
-                                                    SHADOWED_DIRECTIONAL_LIGHT_POSITION.y,
-                                                    SHADOWED_DIRECTIONAL_LIGHT_POSITION.z, 1.0)
+                                                           SHADOWED_DIRECTIONAL_LIGHT_POSITION.y,
+                                                           SHADOWED_DIRECTIONAL_LIGHT_POSITION.z, 1.0)
         }
 
         // Select which constant buffer to use
@@ -662,26 +653,25 @@ class MetalView : MTKView
         if multithreadedUpdate {
             DispatchQueue.concurrentPerform(iterations: objectsToRender) { i in
                 let thisPtr = ptr.advanced(by: i)
-                _ = self.renderables[i].UpdateData(thisPtr, deltaTime: 1.0/60.0)
+                _ = self.renderables[i].UpdateData(thisPtr, deltaTime: 1.0 / 60.0)
             }
-        }
-        else {
-            for index in 0..<objectsToRender {
-                ptr = renderables[index].UpdateData(ptr, deltaTime: 1.0/60.0)
+        } else {
+            for index in 0 ..< objectsToRender {
+                ptr = renderables[index].UpdateData(ptr, deltaTime: 1.0 / 60.0)
             }
         }
 
         // Advance the object data pointer once more so we can write the data for the ground plane object
         ptr = ptr.advanced(by: objectsToRender)
 
-        _ = groundPlane!.UpdateData(ptr, deltaTime: 1.0/60.0)
+        _ = groundPlane!.UpdateData(ptr, deltaTime: 1.0 / 60.0)
 
         // Mark constant buffer as modified (objectsToRender+1 because of the ground plane)
-        constantBufferForFrame.didModifyRange(0..<mainPassOffset+(MemoryLayout<ObjectData>.stride*(objectsToRender+1)))
+        constantBufferForFrame.didModifyRange(0 ..< mainPassOffset + (MemoryLayout<ObjectData>.stride * (objectsToRender + 1)))
 
         // Create command buffers for the entire scene rendering
-        let shadowCommandBuffer : MTLCommandBuffer = metalQueue!.makeCommandBufferWithUnretainedReferences()!
-        let mainCommandBuffer : MTLCommandBuffer = metalQueue!.makeCommandBufferWithUnretainedReferences()!
+        let shadowCommandBuffer: MTLCommandBuffer = metalQueue!.makeCommandBufferWithUnretainedReferences()!
+        let mainCommandBuffer: MTLCommandBuffer = metalQueue!.makeCommandBufferWithUnretainedReferences()!
 
         // Enforce the ordering:
         // Shadows must be completed before the main rendering pass
@@ -700,20 +690,19 @@ class MetalView : MTKView
                 self.encodeShadowPass(shadowCommandBuffer, rp: self.shadowRPs[0], constantBuffer: constantBufferForFrame, passDataOffset: shadowOffset, objectDataOffset: objectDataOffset)
                 dispatchGroup.leave()
             }
-        }
-        else {
-            encodeShadowPass(shadowCommandBuffer, rp: self.shadowRPs[0], constantBuffer: constantBufferForFrame, passDataOffset: shadowOffset, objectDataOffset: objectDataOffset)
+        } else {
+            encodeShadowPass(shadowCommandBuffer, rp: shadowRPs[0], constantBuffer: constantBufferForFrame, passDataOffset: shadowOffset, objectDataOffset: objectDataOffset)
         }
 
-        //MARK: Dispatch Main Render Pass
+        // MARK: Dispatch Main Render Pass
+
         if multithreadedRender {
             dispatchGroup.enter()
             dispatchQueue.async {
                 self.drawMainPass(mainCommandBuffer, constantBuffer: constantBufferForFrame, mainPassOffset: mainPassOffset, objectDataOffset: objectDataOffset)
                 dispatchGroup.leave()
             }
-        }
-        else {
+        } else {
             drawMainPass(mainCommandBuffer, constantBuffer: constantBufferForFrame, mainPassOffset: mainPassOffset, objectDataOffset: objectDataOffset)
         }
 
@@ -731,9 +720,9 @@ class MetalView : MTKView
 
         let delta = end - start
 
-        let mseconds = machToMilliseconds*Double(delta)
+        let mseconds = machToMilliseconds * Double(delta)
 
-        self.runningAverageCPU = (runningAverageCPU * Double(currentFrame-1) + mseconds) / Double(currentFrame)
+        runningAverageCPU = (runningAverageCPU * Double(currentFrame - 1) + mseconds) / Double(currentFrame)
 
         if frameCounter % 60 == 0 {
             frameEncodingTimeField?.stringValue = String.localizedStringWithFormat("%.3f ms", mseconds)
@@ -742,7 +731,7 @@ class MetalView : MTKView
         // Increment our constant buffer counter
         // This will wrap and the semaphore will make sure we aren't using a buffer that's already in flight
         constantBufferSlot = (constantBufferSlot + 1) % MAX_FRAMES_IN_FLIGHT
-        frameCounter = frameCounter+1
+        frameCounter = frameCounter + 1
     }
 
     func resetCamera() {
@@ -755,102 +744,96 @@ class MetalView : MTKView
     override func keyDown(with event: NSEvent) {
         guard !event.isARepeat else { return }
 
-        switch Int(event.keyCode)
-        {
-            case kVK_ANSI_W:
-                moveForward = true
+        switch Int(event.keyCode) {
+        case kVK_ANSI_W:
+            moveForward = true
 
-            case kVK_ANSI_A:
-                moveLeft = true
+        case kVK_ANSI_A:
+            moveLeft = true
 
-            case kVK_ANSI_S:
-                moveBackward = true
+        case kVK_ANSI_S:
+            moveBackward = true
 
-            case kVK_ANSI_D:
-                moveRight = true
+        case kVK_ANSI_D:
+            moveRight = true
 
-            case kVK_ANSI_3:
-                drawLighting = !drawLighting
-                if drawLighting {
-                    lightingLabel?.stringValue = "Lambert Lighting"
-                }
-                else {
-                    lightingLabel?.stringValue = "No Lighting"
-                }
+        case kVK_ANSI_3:
+            drawLighting = !drawLighting
+            if drawLighting {
+                lightingLabel?.stringValue = "Lambert Lighting"
+            } else {
+                lightingLabel?.stringValue = "No Lighting"
+            }
 
-            case kVK_ANSI_4:
-                drawShadowsOnCubes = !drawShadowsOnCubes
-                if !drawShadowsOnCubes {
-                    cubeShadowLabel?.stringValue = "Unshadowed Cubes"
-                }
-                else {
-                    cubeShadowLabel?.stringValue = "Shadowed Cubes"
-                }
+        case kVK_ANSI_4:
+            drawShadowsOnCubes = !drawShadowsOnCubes
+            if !drawShadowsOnCubes {
+                cubeShadowLabel?.stringValue = "Unshadowed Cubes"
+            } else {
+                cubeShadowLabel?.stringValue = "Shadowed Cubes"
+            }
 
-            case kVK_ANSI_5:
-                multithreadedUpdate = !multithreadedUpdate
+        case kVK_ANSI_5:
+            multithreadedUpdate = !multithreadedUpdate
 
-            case kVK_ANSI_6:
-                multithreadedRender = !multithreadedRender
-                if !multithreadedRender {
-                    mtLabel?.stringValue = "Single Threaded Encode"
-                }
-                else {
-                    mtLabel?.stringValue = "Multithreaded Encode"
-                }
+        case kVK_ANSI_6:
+            multithreadedRender = !multithreadedRender
+            if !multithreadedRender {
+                mtLabel?.stringValue = "Single Threaded Encode"
+            } else {
+                mtLabel?.stringValue = "Multithreaded Encode"
+            }
 
-            case kVK_ANSI_7:
-                objectsToRender = max(objectsToRender/2, 10)
-                drawCountField?.stringValue = "\(objectsToRender) draws"
+        case kVK_ANSI_7:
+            objectsToRender = max(objectsToRender / 2, 10)
+            drawCountField?.stringValue = "\(objectsToRender) draws"
 
-            case kVK_ANSI_8:
-                objectsToRender = min(objectsToRender*2,OBJECT_COUNT)
-                drawCountField?.stringValue = "\(objectsToRender) draws"
+        case kVK_ANSI_8:
+            objectsToRender = min(objectsToRender * 2, OBJECT_COUNT)
+            drawCountField?.stringValue = "\(objectsToRender) draws"
 
-            case kVK_ANSI_9:
-                showDepthAndShadow = !showDepthAndShadow
-                if showDepthAndShadow {
-                    drawCountField?.isHidden = true
-                    frameEncodingTimeField?.isHidden = true
-                    mtLabel?.isHidden = true
-                    multithreadUpdateLabel?.isHidden = true
-                    cubeShadowLabel?.isHidden = true
-                    lightingLabel?.isHidden = true
-                }
-                else {
-                    drawCountField?.isHidden = false
-                    frameEncodingTimeField?.isHidden = false
-                    mtLabel?.isHidden = false
-                    multithreadUpdateLabel?.isHidden = false
-                    cubeShadowLabel?.isHidden = false
-                    lightingLabel?.isHidden = false
-                }
+        case kVK_ANSI_9:
+            showDepthAndShadow = !showDepthAndShadow
+            if showDepthAndShadow {
+                drawCountField?.isHidden = true
+                frameEncodingTimeField?.isHidden = true
+                mtLabel?.isHidden = true
+                multithreadUpdateLabel?.isHidden = true
+                cubeShadowLabel?.isHidden = true
+                lightingLabel?.isHidden = true
+            } else {
+                drawCountField?.isHidden = false
+                frameEncodingTimeField?.isHidden = false
+                mtLabel?.isHidden = false
+                multithreadUpdateLabel?.isHidden = false
+                cubeShadowLabel?.isHidden = false
+                lightingLabel?.isHidden = false
+            }
 
-            default:
-                break
+        default:
+            break
         }
     }
 
     override func keyUp(with event: NSEvent) {
-        switch Int(event.keyCode)
-        {
-            case kVK_ANSI_W:
-                moveForward = false
+        switch Int(event.keyCode) {
+        case kVK_ANSI_W:
+            moveForward = false
 
-            case kVK_ANSI_A:
-                moveLeft = false
+        case kVK_ANSI_A:
+            moveLeft = false
 
-            case kVK_ANSI_S:
-                moveBackward = false
+        case kVK_ANSI_S:
+            moveBackward = false
 
-            case kVK_ANSI_D:
-                moveRight = false
+        case kVK_ANSI_D:
+            moveRight = false
 
-            case kVK_Delete:
-                resetCamera()
+        case kVK_Delete:
+            resetCamera()
 
-            default:
-                break
+        default:
+            break
         }
     }
 
@@ -859,7 +842,7 @@ class MetalView : MTKView
         mouseDown = true
     }
 
-    override func mouseUp(with event: NSEvent) {
+    override func mouseUp(with _: NSEvent) {
         mouseDown = false
     }
 
