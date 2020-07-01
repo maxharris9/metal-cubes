@@ -595,9 +595,13 @@ class MetalView: MTKView {
 
         // Update view matrix here
         if moveForward {
-            camera.position.z += 1.0
+            DispatchQueue.main.async {
+                self.camera.position.z += 1.0
+            }
         } else if moveBackward {
-            camera.position.z -= 1.0
+            DispatchQueue.main.async {
+                self.camera.position.z -= 1.0
+            }
         }
 
         if mouseDown {
