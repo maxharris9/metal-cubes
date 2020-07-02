@@ -15,11 +15,8 @@ import Carbon.HIToolbox.Events
 
 let DEG2RAD = .pi / 180.0
 
-let SHADOW_DIMENSION = 2048
-
 let MAX_FRAMES_IN_FLIGHT: Int = 3
 
-let SHADOW_PASS_COUNT: Int = 1
 let MAIN_PASS_COUNT: Int = 1
 let OBJECT_COUNT: Int = 200_000
 
@@ -28,14 +25,7 @@ let START_POSITION = SIMD3<Float>(0.0, 0.0, -325.0)
 let START_CAMERA_VIEW_DIR = SIMD3<Float>(0.0, 0.0, 1.0)
 let START_CAMERA_UP_DIR = SIMD3<Float>(0.0, 1.0, 0.0)
 
-let GROUND_POSITION = SIMD3<Float>(0.0, -250.0, 0.0)
-let GROUND_COLOR = SIMD4<Float>(repeating: 1.0)
-
-let SHADOWED_DIRECTIONAL_LIGHT_DIRECTION = SIMD3<Float>(0.0, -1.0, 0.0)
-let SHADOWED_DIRECTIONAL_LIGHT_UP = SIMD3<Float>(0.0, 0.0, 1.0)
-let SHADOWED_DIRECTIONAL_LIGHT_POSITION = SIMD3<Float>(0.0, 225.0, 0.0)
-
-let CONSTANT_BUFFER_SIZE: Int = OBJECT_COUNT * MemoryLayout<ObjectData>.size + SHADOW_PASS_COUNT * MemoryLayout<ShadowPass>.size + MAIN_PASS_COUNT * MemoryLayout<MainPass>.size
+let CONSTANT_BUFFER_SIZE: Int = OBJECT_COUNT * MemoryLayout<ObjectData>.size + MAIN_PASS_COUNT * MemoryLayout<MainPass>.size
 
 class MetalView: MTKView {
     @IBOutlet var lightingLabel: NSTextField?
@@ -46,10 +36,6 @@ class MetalView: MTKView {
     @IBOutlet var drawCountField: NSTextField?
 
     let mainRPDesc = MTLRenderPassDescriptor()
-
-    var shadowRPs: [MTLRenderPassDescriptor] = [MTLRenderPassDescriptor]()
-
-    var shadowMap: MTLTexture?
 
     var mainPassDepthTexture: MTLTexture?
     var mainPassFramebuffer: MTLTexture?
@@ -66,16 +52,14 @@ class MetalView: MTKView {
     // Contains all our objects and metadata about them
     // We aren't doing any culling so that means we'll be drawing everything every frame
     var renderables: ContiguousArray<RenderableObject> = ContiguousArray<RenderableObject>()
-    var groundPlane: StaticRenderableObject?
 
     // Constant buffer ring
     var constantBuffers: [MTLBuffer] = [MTLBuffer]()
     var constantBufferSlot: Int = 0
     var frameCounter: UInt = 1
 
-    // View and shadow cameras
+    // View camera
     var camera = Camera()
-    var shadowCameras: [Camera] = [Camera]()
 
     // Controls
     var moveForward = false
@@ -90,7 +74,6 @@ class MetalView: MTKView {
 
     var mouseDownPoint = NSPoint.zero
 
-    var drawLighting = true
     var drawShadowsOnCubes = false
     var multithreadedUpdate = false
     var multithreadedRender = false
@@ -105,17 +88,12 @@ class MetalView: MTKView {
     var mainPassProjection = matrix_float4x4()
     var mainPassFrameData = MainPass()
 
-    var shadowPassData = [ShadowPass]()
-
     // Our pipelines
     var unshadedPipeline: MTLRenderPipelineState?
     var unshadedShadowedPipeline: MTLRenderPipelineState?
 
     var litPipeline: MTLRenderPipelineState?
     var litShadowedPipeline: MTLRenderPipelineState?
-
-    var planeRenderPipeline: MTLRenderPipelineState?
-    var zpassPipeline: MTLRenderPipelineState?
 
     var quadVisPipeline: MTLRenderPipelineState?
     var depthVisPipeline: MTLRenderPipelineState?
@@ -149,19 +127,6 @@ class MetalView: MTKView {
         camera.direction = START_CAMERA_VIEW_DIR
         camera.up = START_CAMERA_UP_DIR
 
-        // Set up shadow camera and data
-        do {
-            let c = Camera()
-
-            c.direction = SHADOWED_DIRECTIONAL_LIGHT_DIRECTION
-            c.up = SHADOWED_DIRECTIONAL_LIGHT_UP
-            c.position = SHADOWED_DIRECTIONAL_LIGHT_POSITION
-
-            shadowCameras.append(c)
-
-            shadowPassData.append(ShadowPass())
-        }
-
         var timebase: mach_timebase_info_data_t = mach_timebase_info_data_t()
         mach_timebase_info(&timebase)
 
@@ -182,9 +147,6 @@ class MetalView: MTKView {
             // Shaders for lighting/shadowing
             let vertexFunction = lib.makeFunction(name: "vertex_main")
             let unshadedFragment = lib.makeFunction(name: "unshaded_fragment")
-            let unshadedShadowedFragment = lib.makeFunction(name: "unshaded_shadowed_fragment")
-            let planeVertex = lib.makeFunction(name: "plane_vertex")
-            let planeFragment = lib.makeFunction(name: "plane_fragment")
 
             let pipeDesc = MTLRenderPipelineDescriptor()
             pipeDesc.vertexFunction = vertexFunction
@@ -193,42 +155,11 @@ class MetalView: MTKView {
             pipeDesc.depthAttachmentPixelFormat = .depth32Float
 
             try unshadedPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
-
-            pipeDesc.fragmentFunction = unshadedShadowedFragment
             try unshadedShadowedPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
-
-            let litVertexFunction = lib.makeFunction(name: "lit_vertex")
-            let litFragmentFunction = lib.makeFunction(name: "lit_fragment")
-            let litShadowedFragment = lib.makeFunction(name: "lit_shadowed_fragment")
-
-            // Rendering with simple lighting
-            pipeDesc.vertexFunction = litVertexFunction
-            pipeDesc.fragmentFunction = litFragmentFunction
 
             try litPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
 
-            pipeDesc.fragmentFunction = litShadowedFragment
-
             try litShadowedPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
-
-            // Ground plane
-
-            pipeDesc.vertexFunction = planeVertex
-            pipeDesc.fragmentFunction = planeFragment
-            try planeRenderPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
-
-            // Shadow pass
-
-            let zpassVertex = lib.makeFunction(name: "zpass_vertex_main")
-            let zpassFragment = lib.makeFunction(name: "zpass_fragment")
-
-            // Z only passes do not need to write color
-            pipeDesc.vertexFunction = zpassVertex
-            pipeDesc.fragmentFunction = zpassFragment
-            pipeDesc.colorAttachments[0].pixelFormat = .invalid
-            pipeDesc.colorAttachments[0].writeMask = MTLColorWriteMask()
-
-            try zpassPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
         } catch {
             fatalError("Could not create lighting shaders, failing. \(error)")
         }
@@ -236,20 +167,13 @@ class MetalView: MTKView {
         do {
             // Visualization shaders
             let vertexFunction = lib.makeFunction(name: "quad_vertex_main")
-            let quadVisFragFunction = lib.makeFunction(name: "quad_fragment_main")
             let quadTexVisFunction = lib.makeFunction(name: "textured_quad_fragment")
-            let quadDepthVisFunction = lib.makeFunction(name: "visualize_depth_fragment")
 
             let pipeDesc = MTLRenderPipelineDescriptor()
             pipeDesc.vertexFunction = vertexFunction
-            pipeDesc.fragmentFunction = quadVisFragFunction
             pipeDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
 
             try quadVisPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
-
-            pipeDesc.fragmentFunction = quadDepthVisFunction
-            try depthVisPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
-
             pipeDesc.fragmentFunction = quadTexVisFunction
             try texQuadVisPipeline = device!.makeRenderPipelineState(descriptor: pipeDesc)
         } catch {
@@ -276,9 +200,7 @@ class MetalView: MTKView {
 
         let devices = MTLCopyAllDevices()
         for device in devices {
-//            if !device.isLowPower {
             self.device = device
-//            }
         }
 
         // MARK: Set up render targets in MTKView
@@ -300,23 +222,7 @@ class MetalView: MTKView {
             constantBuffers.append(buf)
         }
 
-        // MARK: Shadow Texture Creation
-
-        do {
-            let texDesc: MTLTextureDescriptor = MTLTextureDescriptor()
-            texDesc.pixelFormat = MTLPixelFormat.depth32Float
-            texDesc.width = SHADOW_DIMENSION
-            texDesc.height = SHADOW_DIMENSION
-            texDesc.depth = 1
-            texDesc.textureType = MTLTextureType.type2D
-            texDesc.usage = [MTLTextureUsage.renderTarget, MTLTextureUsage.shaderRead]
-            texDesc.storageMode = .private
-
-            shadowMap = device!.makeTexture(descriptor: texDesc)
-        }
-
         // MARK: Main framebuffer / depth creation
-
         do {
             let texDesc = MTLTextureDescriptor()
             texDesc.width = Int(frame.width)
@@ -348,14 +254,11 @@ class MetalView: MTKView {
         do {
             let rp = MTLRenderPassDescriptor()
             rp.depthAttachment.clearDepth = 1.0
-            rp.depthAttachment.texture = shadowMap
             rp.depthAttachment.loadAction = .clear
             rp.depthAttachment.storeAction = .store
-            shadowRPs.append(rp)
         }
 
         // MARK: Depth State Creation
-
         do {
             let depthStencilDesc = MTLDepthStencilDescriptor()
             depthStencilDesc.isDepthWriteEnabled = true
@@ -369,11 +272,9 @@ class MetalView: MTKView {
         }
 
         // MARK: Shader Creation
-
         createPipelines()
 
         // MARK: Object Creation
-
         do {
             let (geo, index, indexCount, vertCount) = createCube(device!)
 
@@ -388,15 +289,13 @@ class MetalView: MTKView {
                 cube.count = vertCount
 
                 let r = Float(Float(drand48())) * 2.0
-                let r1 = Float(Float(drand48())) * 2.0
+                let r1 = Float(Float(drand48())) * 4.0
                 let r2 = Float(Float(drand48())) * 2.0
 
                 cube.rotationRate = SIMD3<Float>(r, r1, r2)
 
-                let scale = Float(drand48() * 5.0)
-
+                let scale = Float(drand48() * 10.0)
                 cube.scale = SIMD3<Float>(repeating: scale)
-
                 cube.objectData.color = SIMD4<Float>(Float(drand48()),
                                                      Float(drand48()),
                                                      Float(drand48()), 1.0)
@@ -404,50 +303,11 @@ class MetalView: MTKView {
             }
         }
 
-        do {
-            let (planeGeo, count) = createPlane(device!)
-            groundPlane = StaticRenderableObject(m: planeGeo, idx: nil, count: count, tex: nil)
-            groundPlane!.position = SIMD4<Float>(GROUND_POSITION.x,
-                                                 GROUND_POSITION.y,
-                                                 GROUND_POSITION.z, 1.0)
-            groundPlane!.objectData.color = GROUND_COLOR
-            groundPlane!.objectData.LocalToWorld.columns.3 = groundPlane!.position
-        }
-
         // Main pass projection matrix
         // Our window cannot change size so we don't ever update this
         mainPassProjection = getPerpectiveProjectionMatrix(Float(60.0 * DEG2RAD), aspectRatio: Float(frame.width) / Float(frame.height), zFar: 2000.0, zNear: 1.0)
     }
 
-    // Encodes a single shadow pass
-    func encodeShadowPass(_ commandBuffer: MTLCommandBuffer, rp: MTLRenderPassDescriptor, constantBuffer: MTLBuffer, passDataOffset: Int, objectDataOffset: Int) {
-        let enc = commandBuffer.makeRenderCommandEncoder(descriptor: rp)!
-        enc.setDepthStencilState(depthTestLess)
-
-        // We're only going to draw back faces into the shadowmap
-        enc.setCullMode(MTLCullMode.front)
-
-        // setVertexOffset will allow faster updates, but we must bind the Constant buffer once
-        enc.setVertexBuffer(constantBuffer, offset: 0, index: 1)
-        // Bind the ShadowPass data once for all objects to see
-        enc.setVertexBuffer(constantBuffer, offset: passDataOffset, index: 2)
-
-        // We have one pipeline for all our objects, so only bind it once
-        enc.setRenderPipelineState(zpassPipeline!)
-        enc.setVertexBuffer(renderables[0].mesh, offset: 0, index: 0)
-
-        var offset = objectDataOffset
-        for index in 0 ..< objectsToRender {
-            renderables[index].DrawZPass(enc, offset: offset)
-            offset += MemoryLayout<ObjectData>.size
-        }
-
-        enc.endEncoding()
-
-        commandBuffer.commit()
-    }
-
-    // A tiny bit more complex than DrawShadowPass
     // We must pick the current drawable from MTKView as well as calling present before
     // Committing our command buffer
     // We'll also add a completion handler to signal the semaphore
@@ -461,32 +321,14 @@ class MetalView: MTKView {
         enc.setVertexBuffer(constantBuffer, offset: passDataOffset, index: 2)
         enc.setFragmentBuffer(constantBuffer, offset: passDataOffset, index: 2)
 
-        enc.setFragmentTexture(shadowMap, index: 0)
-
         var offset = objectDataOffset
-        if drawShadowsOnCubes {
-            if drawLighting {
-                enc.setRenderPipelineState(litShadowedPipeline!)
-            } else {
-                enc.setRenderPipelineState(unshadedShadowedPipeline!)
-            }
-        } else {
-            if drawLighting {
-                enc.setRenderPipelineState(litPipeline!)
-            } else {
-                enc.setRenderPipelineState(unshadedPipeline!)
-            }
-        }
+        enc.setRenderPipelineState(litPipeline!)
 
         enc.setVertexBuffer(renderables[0].mesh!, offset: 0, index: 0)
         for index in 0 ..< objectsToRender {
             renderables[index].Draw(enc, offset: offset)
             offset += MemoryLayout<ObjectData>.size
         }
-
-        enc.setRenderPipelineState(planeRenderPipeline!)
-        enc.setVertexBuffer(groundPlane!.mesh, offset: 0, index: 0)
-        groundPlane!.Draw(enc, offset: offset)
     }
 
     func drawMainPass(_ mainCommandBuffer: MTLCommandBuffer, constantBuffer: MTLBuffer, mainPassOffset: Int, objectDataOffset: Int) {
@@ -512,58 +354,12 @@ class MetalView: MTKView {
         let currentDrawable = self.currentDrawable!
         let rpDesc = currentRenderPassDescriptor!
 
-        // Draws the Scene, Depth and Shadow map to the screen
-        if showDepthAndShadow {
-            let visEnc = mainCommandBuffer.makeRenderCommandEncoder(descriptor: rpDesc)!
-
-            var viewport = MTLViewport(originX: 0.0, originY: 0.0,
-                                       width: Double(frame.width) * 0.5,
-                                       height: Double(frame.height) * 0.5,
-                                       znear: 0.0, zfar: 1.0)
-
-            visEnc.setViewport(viewport)
-
-            visEnc.setRenderPipelineState(texQuadVisPipeline!)
-            visEnc.setFragmentTexture(mainPassFramebuffer, index: 0)
-
-            visEnc.drawPrimitives(type: MTLPrimitiveType.triangleStrip, vertexStart: 0, vertexCount: 4)
-
-            viewport = MTLViewport(originX: Double(frame.width) * 0.5, originY: 0.0,
-                                   width: Double(frame.width) * 0.5,
-                                   height: Double(frame.height) * 0.5,
-                                   znear: 0.0, zfar: 1.0)
-
-            visEnc.setViewport(viewport)
-
-            visEnc.setRenderPipelineState(depthVisPipeline!)
-            visEnc.setFragmentTexture(mainPassDepthTexture, index: 0)
-
-            visEnc.drawPrimitives(type: MTLPrimitiveType.triangleStrip, vertexStart: 0, vertexCount: 4)
-
-            // Shadow
-            viewport = MTLViewport(originX: 0.0,
-                                   originY: Double(frame.height) * 0.5,
-                                   width: Double(frame.width) * 0.5,
-                                   height: Double(frame.height) * 0.5,
-                                   znear: 0.0, zfar: 1.0)
-
-            visEnc.setViewport(viewport)
-
-            visEnc.setFragmentTexture(shadowMap, index: 0)
-            visEnc.drawPrimitives(type: MTLPrimitiveType.triangleStrip, vertexStart: 0, vertexCount: 4)
-
-            visEnc.endEncoding()
-        } else {
-            // Draws the main pass
-            let finalEnc = mainCommandBuffer.makeRenderCommandEncoder(descriptor: rpDesc)!
-
-            finalEnc.setRenderPipelineState(texQuadVisPipeline!)
-            finalEnc.setFragmentTexture(mainPassFramebuffer, index: 0)
-
-            finalEnc.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-
-            finalEnc.endEncoding()
-        }
+        // Draws the main pass
+        let finalEnc = mainCommandBuffer.makeRenderCommandEncoder(descriptor: rpDesc)!
+        finalEnc.setRenderPipelineState(texQuadVisPipeline!)
+        finalEnc.setFragmentTexture(mainPassFramebuffer, index: 0)
+        finalEnc.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        finalEnc.endEncoding()
 
         mainCommandBuffer.present(currentDrawable)
 
@@ -572,14 +368,11 @@ class MetalView: MTKView {
         }
 
         mainCommandBuffer.addCompletedHandler { _ in
-
             let end = mach_absolute_time()
             self.gpuTiming[Int(currentFrame % 3)] = end - self.gpuTiming[Int(currentFrame % 3)]
 
             let seconds = self.machToMilliseconds * Double(self.gpuTiming[Int(currentFrame % 3)])
-
             self.runningAverageGPU = (self.runningAverageGPU * Double(currentFrame - 1) + seconds) / Double(currentFrame)
-
             self.semaphore.signal()
         }
 
@@ -609,46 +402,21 @@ class MetalView: MTKView {
             cameraAngles.y += 0.005 * orbit.x
         }
 
-        // Prepare Shadow Pass data
-        // The shadow is cast by a directional light - an infinite distance away
-        // This is a good fit for an orthographic projection
-        // IMPORTANT NOTE:
-        // The projection is hardcoded right now since our objects do not move.
-        // What this SHOULD do is determine the bounds of all the objects that will be drawn into the shadowmap
-        // and generate the smallest frustum possible
-
-        do {
-            // Figure out far plane distance at least
-            let zFar = distance(GROUND_POSITION, SHADOWED_DIRECTIONAL_LIGHT_POSITION)
-
-            shadowPassData[0].ViewProjection = getLHOrthoMatrix(1100, height: 1100, zFar: zFar, zNear: 25)
-            shadowPassData[0].ViewProjection = matrix_multiply(shadowPassData[0].ViewProjection, shadowCameras[0].GetViewMatrix())
-        }
-
         do {
             // NOTE: We're doing an orbit so we've usurped the normal camera class here
             mainPassView = matrix_multiply(getRotationAroundY(cameraAngles.y), getRotationAroundX(cameraAngles.x))
             mainPassView = matrix_multiply(camera.GetViewMatrix(), mainPassView)
             mainPassFrameData.ViewProjection = matrix_multiply(mainPassProjection, mainPassView)
-            mainPassFrameData.ViewShadow0Projection = shadowPassData[0].ViewProjection
-            mainPassFrameData.LightPosition = SIMD4<Float>(SHADOWED_DIRECTIONAL_LIGHT_POSITION.x,
-                                                           SHADOWED_DIRECTIONAL_LIGHT_POSITION.y,
-                                                           SHADOWED_DIRECTIONAL_LIGHT_POSITION.z, 1.0)
         }
 
         // Select which constant buffer to use
         let constantBufferForFrame = constantBuffers[currentConstantBuffer]
 
-        // Calculate the offsets into the constant buffer for the shadow pass data, main pass data, and object data
-        let shadowOffset = 0
-        let mainPassOffset = MemoryLayout<ShadowPass>.stride + shadowOffset
-        let objectDataOffset = MemoryLayout<MainPass>.stride + mainPassOffset
-
-        // Write the shadow pass data into the constants buffer
-        constantBufferForFrame.contents().storeBytes(of: shadowPassData[0], toByteOffset: shadowOffset, as: ShadowPass.self)
+        // Calculate the offsets into the constant buffer for the main pass data, and object data
+        let objectDataOffset = MemoryLayout<MainPass>.stride
 
         // Write the main pass data into the constants buffer
-        constantBufferForFrame.contents().storeBytes(of: mainPassFrameData, toByteOffset: mainPassOffset, as: MainPass.self)
+        constantBufferForFrame.contents().storeBytes(of: mainPassFrameData, toByteOffset: 0, as: MainPass.self)
 
         // Create a mutable pointer to the beginning of the object data so we can step through it and set the data of each object individually
         var ptr = constantBufferForFrame.contents().advanced(by: objectDataOffset).bindMemory(to: ObjectData.self, capacity: objectsToRender)
@@ -668,18 +436,12 @@ class MetalView: MTKView {
         // Advance the object data pointer once more so we can write the data for the ground plane object
         ptr = ptr.advanced(by: objectsToRender)
 
-        _ = groundPlane!.UpdateData(ptr, deltaTime: 1.0 / 60.0)
-
         // Mark constant buffer as modified (objectsToRender+1 because of the ground plane)
-        constantBufferForFrame.didModifyRange(0 ..< mainPassOffset + (MemoryLayout<ObjectData>.stride * (objectsToRender + 1)))
+        constantBufferForFrame.didModifyRange(0 ..< 0 + (MemoryLayout<ObjectData>.stride * (objectsToRender + 1)))
 
         // Create command buffers for the entire scene rendering
-        let shadowCommandBuffer: MTLCommandBuffer = metalQueue!.makeCommandBufferWithUnretainedReferences()!
         let mainCommandBuffer: MTLCommandBuffer = metalQueue!.makeCommandBufferWithUnretainedReferences()!
 
-        // Enforce the ordering:
-        // Shadows must be completed before the main rendering pass
-        shadowCommandBuffer.enqueue()
         mainCommandBuffer.enqueue()
 
         // Time the encoding, not the data update
@@ -687,27 +449,16 @@ class MetalView: MTKView {
 
         let dispatchGroup = DispatchGroup()
 
-        // Generate the command buffer for Shadowmap
-        if multithreadedRender {
-            dispatchGroup.enter()
-            dispatchQueue.async {
-                self.encodeShadowPass(shadowCommandBuffer, rp: self.shadowRPs[0], constantBuffer: constantBufferForFrame, passDataOffset: shadowOffset, objectDataOffset: objectDataOffset)
-                dispatchGroup.leave()
-            }
-        } else {
-            encodeShadowPass(shadowCommandBuffer, rp: shadowRPs[0], constantBuffer: constantBufferForFrame, passDataOffset: shadowOffset, objectDataOffset: objectDataOffset)
-        }
-
         // MARK: Dispatch Main Render Pass
 
         if multithreadedRender {
             dispatchGroup.enter()
             dispatchQueue.async {
-                self.drawMainPass(mainCommandBuffer, constantBuffer: constantBufferForFrame, mainPassOffset: mainPassOffset, objectDataOffset: objectDataOffset)
+                self.drawMainPass(mainCommandBuffer, constantBuffer: constantBufferForFrame, mainPassOffset: 0, objectDataOffset: objectDataOffset)
                 dispatchGroup.leave()
             }
         } else {
-            drawMainPass(mainCommandBuffer, constantBuffer: constantBufferForFrame, mainPassOffset: mainPassOffset, objectDataOffset: objectDataOffset)
+            drawMainPass(mainCommandBuffer, constantBuffer: constantBufferForFrame, mainPassOffset: 0, objectDataOffset: objectDataOffset)
         }
 
         if multithreadedRender {
@@ -760,14 +511,6 @@ class MetalView: MTKView {
 
         case kVK_ANSI_D:
             moveRight = true
-
-        case kVK_ANSI_3:
-            drawLighting = !drawLighting
-            if drawLighting {
-                lightingLabel?.stringValue = "Lambert Lighting"
-            } else {
-                lightingLabel?.stringValue = "No Lighting"
-            }
 
         case kVK_ANSI_4:
             drawShadowsOnCubes = !drawShadowsOnCubes

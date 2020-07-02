@@ -12,14 +12,6 @@ struct ObjectData
 
 };
 
-struct ShadowPass
-{
-    matrix_float4x4 ViewProjection;
-    matrix_float4x4 pad1;
-    matrix_float4x4 pad2;
-    matrix_float4x4 pad3;
-};
-
 struct MainPass
 {
     matrix_float4x4 ViewProjection;

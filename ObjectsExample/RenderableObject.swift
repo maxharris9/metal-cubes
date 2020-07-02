@@ -69,16 +69,6 @@ class RenderableObject {
         return dest.advanced(by: 1)
     }
 
-    func DrawZPass(_ enc: MTLRenderCommandEncoder, offset: Int) {
-        enc.setVertexBufferOffset(offset, index: 1)
-
-        if indexBuffer != nil {
-            enc.drawIndexedPrimitives(type: MTLPrimitiveType.triangle, indexCount: count, indexType: MTLIndexType.uint16, indexBuffer: indexBuffer!, indexBufferOffset: 0)
-        } else {
-            enc.drawPrimitives(type: MTLPrimitiveType.triangle, vertexStart: 0, vertexCount: count)
-        }
-    }
-
     func Draw(_ enc: MTLRenderCommandEncoder, offset: Int) {
         enc.setVertexBufferOffset(offset, index: 1)
         enc.setFragmentBufferOffset(offset, index: 1)
